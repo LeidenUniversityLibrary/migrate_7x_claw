@@ -35,11 +35,20 @@ class AuthenticatedXml extends SimpleXml {
    */
   protected function fetchNextRow() {
     $target_element = array_shift($this->matches);
+    if (is_null($target_element)) {
+      return;
+    }
     // If we've found the desired element, populate the currentItem and
     // currentId with its data.
+    $this->registerNamespaces($target_element);
+    $this->currentItem = [];
     if ($target_element !== FALSE && !is_null($target_element)) {
       foreach ($this->fieldSelectors() as $field_name => $xpath) {
-        foreach ($target_element->xpath($xpath) as $value) {
+        $values = $target_element->xpath($xpath);
+        if (!is_array($values)) {
+          throw new MigrateException(t("Error retrieving field @field with XPath @xpath.", ['@field' => $field_name, '@xpath' => $xpath]));
+        }
+        foreach ($values as $value) {
           if ($value->children() && !trim((string) $value)) {
             $this->currentItem[$field_name] = $value;
           }
