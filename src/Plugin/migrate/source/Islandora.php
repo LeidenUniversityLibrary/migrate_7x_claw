@@ -37,6 +37,14 @@ class Islandora extends SourcePluginExtension {
    */
   private $q;
 
+
+  /**
+   * Unique field to search for.
+   *
+   * @var string
+   */
+  private $unique_field;
+
   /**
    * The number of batches to run for this source.
    *
@@ -165,6 +173,11 @@ class Islandora extends SourcePluginExtension {
       $this->q = $configuration['q'];
     }
 
+    $this->unique_field = NULL;
+    if (isset($configuration['unique_field']) && !empty($configuration['unique_field'])) {
+      $this->unique_field = $configuration['unique_field'];
+    }
+
     $this->row_type = 'foxml';
     if (isset($configuration['row_type']) && !empty($configuration['row_type'])) {
       $this->row_type = $configuration['row_type'];
@@ -222,6 +235,25 @@ class Islandora extends SourcePluginExtension {
           }
         }
         $this->count = $count;
+      }
+      elseif (isset($this->unique_field)) {
+        $this->count = 0;
+        $limit = 1000;
+        $offset = 0;
+        while ($offset < 1000000) {
+          $query = $this->getFacetQuery($offset, $limit);
+          $result = $this->getDataFetcherPlugin()->getResponseContent($query)->getContents();
+          $body = json_decode($result, TRUE);
+          $count = 0;
+          if (isset($body['facet_counts']['facet_fields'][$this->unique_field])) {
+            $count = count($body['facet_counts']['facet_fields'][$this->unique_field]) / 2;
+          }
+          if ($count == 0) {
+            break;
+          }
+          $this->count += $count;
+          $offset += $limit;
+        }
       }
       else {
         // Just do a regular object count.
@@ -299,12 +331,31 @@ class Islandora extends SourcePluginExtension {
    *   Array of the pids.
    */
   private function getPids($start = 0) {
-    $query = $this->getQuery($start, $this->batchSize);
-    $result = $this->getDataFetcherPlugin()->getResponseContent($query)->getContents();
     $pids = [];
-    $body = json_decode($result, TRUE);
-    foreach ($body['response']['docs'] as $o) {
-      $pids[] = $o['PID'];
+    if (isset($this->unique_field)) {
+      $query = $this->getFacetQuery($start, $this->batchSize);
+      $result = $this->getDataFetcherPlugin()->getResponseContent($query)->getContents();
+      $body = json_decode($result, TRUE);
+      $i = 0;
+      foreach ($body['facet_counts']['facet_fields'][$this->unique_field] as $value) {
+        if ($i % 2 == 0) {
+          $objquery = $this->getQueryForValue($value);
+          $objresult = $this->getDataFetcherPlugin()->getResponseContent($objquery)->getContents();
+          $objbody = json_decode($objresult, TRUE);
+          if (isset($objbody['response']['docs'][0]['PID'])) {
+            $pids[] = $objbody['response']['docs'][0]['PID'];
+          }
+        }
+        $i++;
+      }
+    }
+    else {
+      $query = $this->getQuery($start, $this->batchSize);
+      $result = $this->getDataFetcherPlugin()->getResponseContent($query)->getContents();
+      $body = json_decode($result, TRUE);
+      foreach ($body['response']['docs'] as $o) {
+        $pids[] = $o['PID'];
+      }
     }
     return $pids;
   }
@@ -330,6 +381,53 @@ class Islandora extends SourcePluginExtension {
     $params['q'] = $this->q;
     $params['wt'] = 'json';
     $params['sort'] = 'PID+desc';
+    return $this->solrBase . "/select?" . build_query($params, FALSE);
+  }
+
+  /**
+   * Generate a Solr facet query string.
+   *
+   * @param int $offset
+   *   Row to start on for paging queries.
+   * @param int $limit
+   *   Number of rows to return for paging queries.
+   *
+   * @return string
+   *   The Full facet query URL.
+   */
+  private function getFacetQuery($offset = 0, $limit = 200) {
+    $params = [];
+    $params['rows'] = 0;
+    $params['start'] = 0;
+    $params['fl'] = '';
+    $params['q'] = $this->q;
+    $params['wt'] = 'json';
+    $params['facet'] = 'true';
+    $params['facet.field'] = $this->unique_field;
+    $params['facet.mincount'] = 1;
+    $params['facet.limit'] = $limit;
+    $params['facet.offset'] = $offset;
+    return $this->solrBase . "/select?" . build_query($params, FALSE);
+  }
+
+  /**
+   * Generate a Solr query string for one record containing specific facet value.
+   *
+   * @param string $value
+   *   The facet value to search for.
+   *
+   * @return string
+   *   The Full query URL.
+   */
+  private function getQueryForValue($value) {
+    $params = [];
+    $params['rows'] = 1;
+    $params['start'] = 0;
+    $params['fl'] = 'PID';
+    $params['q'] = $this->q;
+    $escaped_value = str_replace(['"', '&'], ['\\"', '%26'], $value);
+    $params['fq'] = $this->unique_field . ':"' . $escaped_value . '"';
+    $params['wt'] = 'json';
     return $this->solrBase . "/select?" . build_query($params, FALSE);
   }
 
