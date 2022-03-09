@@ -50,7 +50,12 @@ class AuthenticatedXml extends SimpleXml {
         }
         foreach ($values as $value) {
           if ($value->children() && !trim((string) $value)) {
-            $this->currentItem[$field_name] = $value;
+            if ($value->children() == $value) {
+              $this->currentItem[$field_name][] = (string) $value;
+            }
+            else {
+              $this->currentItem[$field_name] = $value;
+            }
           }
           elseif (!trim((string) $value)){
             $this->currentItem[$field_name][] = $value->asXML();
