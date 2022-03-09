@@ -425,7 +425,7 @@ class Islandora extends SourcePluginExtension {
     $params['start'] = 0;
     $params['fl'] = 'PID';
     $params['q'] = $this->q;
-    $escaped_value = str_replace(['"', '&'], ['\\"', '%26'], $value);
+    $escaped_value = str_replace(['"', '&', '#'], ['\\"', '%26', '%23'], $value);
     $params['fq'] = $this->unique_field . ':"' . $escaped_value . '"';
     $params['wt'] = 'json';
     return $this->solrBase . "/select?" . build_query($params, FALSE);
