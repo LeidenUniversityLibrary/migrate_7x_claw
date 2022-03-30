@@ -46,6 +46,13 @@ class Islandora extends SourcePluginExtension {
   private $unique_field;
 
   /**
+   * Exclude datastreams.
+   *
+   * @var array
+   */
+  private $excludeDatastreams;
+
+  /**
    * The number of batches to run for this source.
    *
    * @var int
@@ -165,6 +172,7 @@ class Islandora extends SourcePluginExtension {
         throw new MigrateException("You must provide a Solr field with the list of datastreams as 'datastream_solr_field'.");
       }
       $this->datastreamSolrField = $configuration['datastream_solr_field'];
+      $this->excludeDatastreams = $configuration['exclude_datastreams'] ?? ['AUDIT'];
     }
     $this->httpClient = \Drupal::httpClient();
 
@@ -230,8 +238,8 @@ class Islandora extends SourcePluginExtension {
           $result = $this->getDataFetcherPlugin()->getResponseContent($query)->getContents();
           $body = json_decode($result, TRUE);
           foreach ($body['response']['docs'] as $object) {
-            // Don't include AUDIT as you don't see if via Tuque/Fedora API-A.
-            $count += count(array_diff($object[$this->datastreamSolrField], ['AUDIT']));
+            // Don't include AUDIT (or other datastreams) as you don't see if via Tuque/Fedora API-A.
+            $count += count(array_diff($object[$this->datastreamSolrField], $this->excludeDatastreams));
           }
         }
         $this->count = $count;
@@ -246,7 +254,7 @@ class Islandora extends SourcePluginExtension {
           $body = json_decode($result, TRUE);
           $count = 0;
           if (isset($body['facet_counts']['facet_fields'][$this->unique_field])) {
-            $count = count($body['facet_counts']['facet_fields'][$this->unique_field]) / 2;
+            $count = intdiv(count($body['facet_counts']['facet_fields'][$this->unique_field]), 2);
           }
           if ($count == 0) {
             break;
@@ -425,7 +433,7 @@ class Islandora extends SourcePluginExtension {
     $params['start'] = 0;
     $params['fl'] = 'PID';
     $params['q'] = $this->q;
-    $escaped_value = str_replace(['"', '&', '#'], ['\\"', '%26', '%23'], $value);
+    $escaped_value = str_replace(['"', '&', '#', '+'], ['\\"', '%26', '%23', '%2B'], $value);
     $params['fq'] = $this->unique_field . ':"' . $escaped_value . '"';
     $params['wt'] = 'json';
     return $this->solrBase . "/select?" . build_query($params, FALSE);
