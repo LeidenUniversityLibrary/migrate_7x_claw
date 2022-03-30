@@ -3,9 +3,12 @@
 namespace Drupal\migrate_7x_claw\Plugin\migrate_plus\data_parser;
 
 use Drupal\migrate_plus\Plugin\migrate_plus\data_parser\SimpleXml;
+use Drupal\migrate\MigrateException;
+use Drupal\Component\Utility\Crypt;
 
 /**
  * Obtain XML data for migration using the XMLReader pull parser.
+ * Also add hash64 for entire XML and keyName_hash64 for every key.
  *
  * @DataParser(
  *   id = "authenticated_xml",
@@ -40,24 +43,18 @@ class AuthenticatedXml extends SimpleXml {
     }
     // If we've found the desired element, populate the currentItem and
     // currentId with its data.
-    $this->registerNamespaces($target_element);
     $this->currentItem = [];
     if ($target_element !== FALSE && !is_null($target_element)) {
+      $this->registerNamespaces($target_element);
+      $this->currentItem['hash64'] = Crypt::hashBase64($target_element->asXML());
       foreach ($this->fieldSelectors() as $field_name => $xpath) {
         $values = $target_element->xpath($xpath);
         if (!is_array($values)) {
           throw new MigrateException(t("Error retrieving field @field with XPath @xpath.", ['@field' => $field_name, '@xpath' => $xpath]));
         }
         foreach ($values as $value) {
-          if ($value->children() && !trim((string) $value)) {
-            if ($value->children() == $value) {
-              $this->currentItem[$field_name][] = (string) $value;
-            }
-            else {
-              $this->currentItem[$field_name] = $value;
-            }
-          }
-          elseif (!trim((string) $value)){
+          if (is_countable($value->children()) && count($value->children()) > 0) {
+            // is SimpleXML element with children, so keep it as XML.
             $this->currentItem[$field_name][] = $value->asXML();
           }
           else {
@@ -65,10 +62,16 @@ class AuthenticatedXml extends SimpleXml {
           }
         }
       }
-      // Reduce single-value results to scalars.
+      // Add hash and reduce single-value results to scalars.
       foreach ($this->currentItem as $field_name => $values) {
-        if (count($values) == 1) {
-          $this->currentItem[$field_name] = reset($values);
+        if ($field_name !== 'hash64') {
+          foreach ($values as $index => $value) {
+            $this->currentItem[$field_name . '_hash64'][$index] = Crypt::hashBase64($value);
+          }
+          if (count($values) == 1) {
+            $this->currentItem[$field_name] = reset($values);
+            $this->currentItem[$field_name . '_hash64'] = reset($this->currentItem[$field_name . '_hash64']);
+          }
         }
       }
     }
