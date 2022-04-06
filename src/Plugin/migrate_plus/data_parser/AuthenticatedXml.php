@@ -53,9 +53,25 @@ class AuthenticatedXml extends SimpleXml {
           throw new MigrateException(t("Error retrieving field @field with XPath @xpath.", ['@field' => $field_name, '@xpath' => $xpath]));
         }
         foreach ($values as $value) {
-          if (is_countable($value->children()) && count($value->children()) > 0) {
-            // is SimpleXML element with children, so keep it as XML.
-            $this->currentItem[$field_name][] = $value->asXML();
+          if ($this->all_child_elements_count($value) > 0) {
+            // Is SimpleXML element with children, so keep it as XML.
+            // But add the namespace declaration to this piece of XML.
+            $xml = $value->asXML();
+            $first_close = strpos($xml, '>');
+            if ($first_close) {
+              if (substr($xml, $first_close - 1, 1) == '/') {
+                // the xml is something like '<element/>', so position before the /.
+                $first_close = $first_close - 1;
+              }
+              $new_xml = substr($xml, 0, $first_close);
+              $namespaces = $value->getNamespaces(TRUE);
+              foreach ($namespaces as $nsprefix => $nsuri) {
+                $new_xml .= " xmlns:$nsprefix=\"$nsuri\"";
+              }
+              $new_xml .= substr($xml, $first_close);
+              $xml = $new_xml;
+            }
+            $this->currentItem[$field_name][] = $xml;
           }
           else {
             $this->currentItem[$field_name][] = (string) $value;
@@ -75,6 +91,17 @@ class AuthenticatedXml extends SimpleXml {
         }
       }
     }
+  }
+
+  /**
+   * Helper function to obtain the count for all child elements, regardless of namespace(s).
+   */
+  private function all_child_elements_count(\SimpleXMLElement $simplexml) {
+    $children = $simplexml->xpath('child::*');
+    if (is_array($children)) {
+      return count($children);
+    }
+    return 0;
   }
 
   /**
