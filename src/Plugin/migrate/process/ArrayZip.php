@@ -86,7 +86,7 @@ use Drupal\migrate\Row;
  * If there are less keys than source values, than some of the source values will not be used.
  * 
  * @MigrateProcessPlugin(
- *   id = "array_zip"
+ *   id = "array_zip",
  *   handle_multiples = TRUE
  * )
  */

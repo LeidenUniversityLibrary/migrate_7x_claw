@@ -59,7 +59,7 @@ use Drupal\migrate\Row;
  * Casting from object to array is supported.
  * 
  * @MigrateProcessPlugin(
- *   id = "array_with_value"
+ *   id = "array_with_value",
  *   handle_multiples = TRUE
  * )
  */
