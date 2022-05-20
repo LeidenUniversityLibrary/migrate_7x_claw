@@ -115,8 +115,8 @@ class SolrDatastream extends DataParserPluginBase {
         $this->datastreams[$dsid] = ['DSID' => $dsid];
         foreach ($this->fieldSelectors() as $field_name => $property_name) {
           $solrfield = str_replace('DSID', $dsid, $property_name);
-          if (isset($solrdoc[$solrfield]) && !isset($this->datastreams[$dsid][$field_name])) {
-            $this->datastreams[$dsid][$field_name] = $solrdoc[$solrfield];
+          if (!isset($this->datastreams[$dsid][$field_name])) {
+            $this->datastreams[$dsid][$field_name] = $solrdoc[$solrfield] ?? NULL;
           }
         }
       }
