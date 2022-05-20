@@ -55,8 +55,10 @@ class AuthenticatedXml extends SimpleXml {
         foreach ($values as $value) {
           if ($this->all_child_elements_count($value) > 0) {
             // Is SimpleXML element with children, so keep it as XML.
-            // But add the namespace declaration to this piece of XML.
             $xml = $value->asXML();
+            // First, calculate the base65 hase before modifying the Xml.
+            $this->currentItem[$field_name . '_hash64'][] = Crypt::hashBase64($xml);
+            // Then add the namespace declaration to this piece of XML.
             $first_close = strpos($xml, '>');
             if ($first_close) {
               if (substr($xml, $first_close - 1, 1) == '/') {
@@ -74,6 +76,7 @@ class AuthenticatedXml extends SimpleXml {
             $this->currentItem[$field_name][] = $xml;
           }
           else {
+            $this->currentItem[$field_name . '_hash64'][] = Crypt::hashBase64((string) $value);
             $this->currentItem[$field_name][] = (string) $value;
           }
         }
@@ -81,12 +84,8 @@ class AuthenticatedXml extends SimpleXml {
       // Add hash and reduce single-value results to scalars.
       foreach ($this->currentItem as $field_name => $values) {
         if ($field_name !== 'hash64') {
-          foreach ($values as $index => $value) {
-            $this->currentItem[$field_name . '_hash64'][$index] = Crypt::hashBase64($value);
-          }
           if (count($values) == 1) {
             $this->currentItem[$field_name] = reset($values);
-            $this->currentItem[$field_name . '_hash64'] = reset($this->currentItem[$field_name . '_hash64']);
           }
         }
       }
