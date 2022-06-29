@@ -3,9 +3,12 @@
 namespace Drupal\migrate_7x_claw\Plugin\migrate_plus\data_parser;
 
 use Drupal\migrate_plus\Plugin\migrate_plus\data_parser\SimpleXml;
+use Drupal\migrate\MigrateException;
+use Drupal\Component\Utility\Crypt;
 
 /**
  * Obtain XML data for migration using the XMLReader pull parser.
+ * Also add hash64 for entire XML and keyName_hash64 for every key.
  *
  * @DataParser(
  *   id = "authenticated_xml",
@@ -35,29 +38,70 @@ class AuthenticatedXml extends SimpleXml {
    */
   protected function fetchNextRow() {
     $target_element = array_shift($this->matches);
+    if (is_null($target_element)) {
+      return;
+    }
     // If we've found the desired element, populate the currentItem and
     // currentId with its data.
+    $this->currentItem = [];
     if ($target_element !== FALSE && !is_null($target_element)) {
+      $this->registerNamespaces($target_element);
+      $this->currentItem['hash64'] = Crypt::hashBase64($target_element->asXML());
       foreach ($this->fieldSelectors() as $field_name => $xpath) {
-        foreach ($target_element->xpath($xpath) as $value) {
-          if ($value->children() && !trim((string) $value)) {
-            $this->currentItem[$field_name] = $value;
-          }
-          elseif (!trim((string) $value)){
-            $this->currentItem[$field_name][] = $value->asXML();
+        $values = $target_element->xpath($xpath);
+        if (!is_array($values)) {
+          throw new MigrateException(t("Error retrieving field @field with XPath @xpath.", ['@field' => $field_name, '@xpath' => $xpath]));
+        }
+        foreach ($values as $value) {
+          if ($this->all_child_elements_count($value) > 0) {
+            // Is SimpleXML element with children, so keep it as XML.
+            // But add the namespace declaration to this piece of XML.
+            $xml = $value->asXML();
+            $first_close = strpos($xml, '>');
+            if ($first_close) {
+              if (substr($xml, $first_close - 1, 1) == '/') {
+                // the xml is something like '<element/>', so position before the /.
+                $first_close = $first_close - 1;
+              }
+              $new_xml = substr($xml, 0, $first_close);
+              $namespaces = $value->getNamespaces(TRUE);
+              foreach ($namespaces as $nsprefix => $nsuri) {
+                $new_xml .= " xmlns:$nsprefix=\"$nsuri\"";
+              }
+              $new_xml .= substr($xml, $first_close);
+              $xml = $new_xml;
+            }
+            $this->currentItem[$field_name][] = $xml;
           }
           else {
             $this->currentItem[$field_name][] = (string) $value;
           }
         }
       }
-      // Reduce single-value results to scalars.
+      // Add hash and reduce single-value results to scalars.
       foreach ($this->currentItem as $field_name => $values) {
-        if (count($values) == 1) {
-          $this->currentItem[$field_name] = reset($values);
+        if ($field_name !== 'hash64') {
+          foreach ($values as $index => $value) {
+            $this->currentItem[$field_name . '_hash64'][$index] = Crypt::hashBase64($value);
+          }
+          if (count($values) == 1) {
+            $this->currentItem[$field_name] = reset($values);
+            $this->currentItem[$field_name . '_hash64'] = reset($this->currentItem[$field_name . '_hash64']);
+          }
         }
       }
     }
+  }
+
+  /**
+   * Helper function to obtain the count for all child elements, regardless of namespace(s).
+   */
+  private function all_child_elements_count(\SimpleXMLElement $simplexml) {
+    $children = $simplexml->xpath('child::*');
+    if (is_array($children)) {
+      return count($children);
+    }
+    return 0;
   }
 
   /**
