@@ -111,19 +111,18 @@ class ArrayZip extends ProcessPluginBase {
     }
 
     $keys = $this->configuration['keys'] ?? range(0, count($value));
-
     $output = [];
     for ($i = 0; TRUE; $i++) {
       $item = [];
       foreach ($keys as $index => $key) {
-        if (array_key_exists($index, $value)) {
+        if (array_key_exists($index, $value) && !is_null($value[$index])) {
           if (!is_array($value[$index]) && ($i === 0)) {
             $item[$key] = $value[$index];
           }
-          elseif (array_key_exists($i, $value[$index])) {
+          elseif (is_array($value[$index]) && array_key_exists($i, $value[$index])) {
             $item[$key] = $value[$index][$i];
           }
-          elseif (array_key_exists($key, $value[$index])) {
+          elseif (is_array($value[$index]) && array_key_exists($key, $value[$index])) {
             $item[$key] = $value[$index][$key];
           }
         }
