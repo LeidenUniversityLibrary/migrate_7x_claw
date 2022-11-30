@@ -56,7 +56,7 @@ class AuthenticatedXml extends SimpleXml {
           if ($this->all_child_elements_count($value) > 0) {
             // Is SimpleXML element with children, so keep it as XML.
             $xml = $value->asXML();
-            // First, calculate the base65 hase before modifying the Xml.
+            // First, calculate the base64 hash before modifying the Xml.
             $this->currentItem[$field_name . '_hash64'][] = Crypt::hashBase64($xml);
             // Then add the namespace declaration to this piece of XML.
             $first_close = strpos($xml, '>');
